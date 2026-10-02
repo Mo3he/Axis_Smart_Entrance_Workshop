@@ -1,0 +1,15 @@
+services:
+  node-red:
+    build: ./node-red
+    container_name: lab-node-red
+    restart: unless-stopped
+    ports:
+      - "1880:1880"
+    environment:
+      - TZ=Europe/Rome
+      - BROKER_HOST=${BROKER_HOST:?Set BROKER_HOST in the .env file}
+    volumes:
+      - node_red_data:/data
+
+volumes:
+  node_red_data:

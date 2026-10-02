@@ -1,0 +1,137 @@
+[
+    {
+        "id": "f1a0000000000001",
+        "type": "tab",
+        "label": "Lab",
+        "disabled": false,
+        "info": "Build your flows here. Follow the README, starting with Part 0."
+    },
+    {
+        "id": "c0a0000000000001",
+        "type": "comment",
+        "z": "f1a0000000000001",
+        "name": "Start here: README, Part 0",
+        "info": "",
+        "x": 170,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "b0b0000000000001",
+        "type": "mqtt-broker",
+        "name": "Workshop broker",
+        "broker": "${BROKER_HOST}",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "d0b0000000000001",
+        "type": "ui-base",
+        "name": "Lab dashboard",
+        "path": "/dashboard",
+        "appIcon": "",
+        "includeClientData": true,
+        "acceptsClientConfig": [
+            "ui-notification",
+            "ui-control"
+        ],
+        "showPathInSidebar": false,
+        "headerContent": "page",
+        "navigationStyle": "default",
+        "titleBarStyle": "default",
+        "showReconnectNotification": true,
+        "notificationDisplayTime": 1,
+        "showDisconnectNotification": true,
+        "allowInstall": false
+    },
+    {
+        "id": "d0b0000000000002",
+        "type": "ui-theme",
+        "name": "Lab theme",
+        "colors": {
+            "surface": "#ffffff",
+            "primary": "#ffcc33",
+            "bgPage": "#eeeeee",
+            "groupBg": "#ffffff",
+            "groupOutline": "#cccccc"
+        },
+        "sizes": {
+            "density": "default",
+            "pagePadding": "12px",
+            "groupGap": "12px",
+            "groupBorderRadius": "4px",
+            "widgetGap": "12px"
+        }
+    },
+    {
+        "id": "d0b0000000000003",
+        "type": "ui-page",
+        "name": "Entrance",
+        "ui": "d0b0000000000001",
+        "path": "/entrance",
+        "icon": "door",
+        "layout": "grid",
+        "theme": "d0b0000000000002",
+        "breakpoints": [
+            { "name": "Default", "px": "0", "cols": "3" },
+            { "name": "Tablet", "px": "576", "cols": "6" },
+            { "name": "Small Desktop", "px": "768", "cols": "9" },
+            { "name": "Desktop", "px": "1024", "cols": "12" }
+        ],
+        "order": 1,
+        "className": "",
+        "visible": "true",
+        "disabled": "false"
+    },
+    {
+        "id": "d0b0000000000004",
+        "type": "ui-group",
+        "name": "Door",
+        "page": "d0b0000000000003",
+        "width": "4",
+        "height": "1",
+        "order": 1,
+        "showTitle": true,
+        "className": "",
+        "visible": "true",
+        "disabled": "false",
+        "groupType": "default"
+    },
+    {
+        "id": "d0b0000000000005",
+        "type": "ui-group",
+        "name": "Events",
+        "page": "d0b0000000000003",
+        "width": "8",
+        "height": "1",
+        "order": 2,
+        "showTitle": true,
+        "className": "",
+        "visible": "true",
+        "disabled": "false",
+        "groupType": "default"
+    }
+]
