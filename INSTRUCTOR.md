@@ -11,15 +11,17 @@ The participant guide is [README.it.md](README.it.md) (Italian, primary for the 
 ```text
                               lab network (isolated)
  ┌──────────────────────────────────────────────────────────────────────────┐
- │ Per group: workstation running docker compose                            │
- │   - Node-RED + Dashboard 2.0   :1880  (receives ACS Pro HTTP POSTs)      │
- │   - Mosquitto broker           :1883  (receives intercom MQTT events)    │
+ │ Per group (4+ groups):                                                   │
+ │   Windows workstation with Docker Desktop                                │
+ │     - Node-RED + Dashboard 2.0 :1880  (receives ACS Pro HTTP POSTs)      │
+ │     - Mosquitto broker         :1883  (receives this group's intercom)   │
+ │   AXIS I8116-E  ── MQTT ──► this group's broker                          │
+ │   AXIS C1410                                                             │
  │                                                                          │
- │ Devices                                                                  │
- │   - AXIS Intercom   ── MQTT ──► broker (one broker only, see 1.1)        │
- │   - AXIS A1601 ── door "AEC main" ── AXIS Camera Station Pro server      │
- │   - AXIS C1410 (speaker)                                                 │
- │   - Any Axis camera for Part 1                                           │
+ │ Shared                                                                   │
+ │   - AXIS Camera Station Pro server                                       │
+ │   - AXIS A1601 ── door "AEC main"                                        │
+ │   - AXIS P1475-LE (camera for Part 1)                                    │
  └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -34,21 +36,22 @@ Traffic that must be allowed:
 
 > On Windows workstations, Docker Desktop publishes ports 1880 and 1883, but **Windows Defender Firewall may still block inbound connections**. Test from another machine before the session.
 
-### 1.1 One group or several?
+### 1.1 Running 4+ groups
 
-The lab document is written for one setup: one Node-RED, one broker, one intercom, one ACS Pro. With several groups, two things conflict:
+Each group has its own intercom and C1410 and its own Node-RED + broker, so Parts 0-3 are fully independent. Only ACS Pro and the A1601 door are shared:
 
-1. **The intercom has one MQTT client**, so it can publish to only one broker. Options:
-   - One intercom per group, each pointed at its group's workstation, or
-   - One shared intercom, configured by the instructor (Parts 3.1 and 3.2 done as a demo) to publish to one broker. On every workstation set `BROKER_HOST=<that IP>` in `.env` so all Node-REDs subscribe to the same broker.
-2. **ACS Pro rules are per group.** Every group creates its own action rules pointing at its own `NODE_RED_IP`, and the External HTTPS trigger names must be unique (for example `UnlockDoor_G1`, `UnlockDoor_G2`). Write the name on each card.
+- **Intercom:** each group points its I8116-E at its own workstation IP (Part 3.1). Leave `BROKER_HOST` unset in `.env`.
+- **Door events:** every group creates its own *Door open too long* and *Door forced* rules, each sending to its own `NODE_RED_IP`. One door event therefore reaches every group at the same time, and every C1410 in the room reacts. That is expected, and a good illustration of one event with many subscribers.
+- **Unlock trigger:** External HTTPS trigger names must be unique on the server. Each group uses `UnlockDoor_G<n>` (on the card).
+- **Rule names:** each group prefixes its rules with `G<n> -` so you can find and delete them afterwards.
+- **Who opens the door:** only the instructor (or one person) triggers the physical door events in Part 4, announced to the room, so groups aren't testing over each other.
 
 ### 1.2 Timing
 
-The document covers a lot for 60 minutes, especially the ACS Pro configuration in Part 4 (four action rules, CA export, TLS setup). If a dry run shows it doesn't fit:
+Participants create the ACS Pro rules themselves (four action rules, CA import, TLS setup), which is a lot for 60 minutes. Time Part 4 in the dry run. If it doesn't fit, fall back to one of these on the day:
 
-- Create the ACS Pro action rules (4.2, 4.4, 4.9) and export the CA in advance, and let participants build only the Node-RED side.
-- Do Parts 3.1/3.2 (intercom MQTT configuration) as an instructor demo.
+- Hand out the exported CA file at the start instead of having each group export it.
+- Have groups that fall behind import [solution/part4-5-smart-entrance.json](solution/part4-5-smart-entrance.json) and only fill in IPs, credentials and the CA.
 
 ---
 
@@ -71,6 +74,15 @@ This starts Mosquitto and Node-RED with Dashboard 2.0 preinstalled. The starter 
 
 Open `http://localhost:1880` and check that the editor loads.
 
+Then check that the ports are reachable **from another machine** (Windows Defender Firewall may block them). In PowerShell on a second PC:
+
+```powershell
+Test-NetConnection <workstation IP> -Port 1880
+Test-NetConnection <workstation IP> -Port 1883
+```
+
+Both must show `TcpTestSucceeded : True`. If not, allow inbound TCP 1880 and 1883 in Windows Defender Firewall on the workstation.
+
 > Mosquitto allows anonymous connections without TLS. That is acceptable **only** on an isolated lab network. Mention it during the MQTT part of the presentation: in production, use TLS and authentication.
 
 ### 2.2 Devices and accounts
@@ -90,7 +102,7 @@ Clips are in [instructor/clips](instructor/clips), generated with the macOS Ital
 
 `3-surveillance.wav` and `4-one-at-a-time.wav` are spares and not used in the lab.
 
-Participants upload the clips themselves in Part 2.4, so remove any existing clips from the C1410 first if you want the indexes to be 0, 1, 2.
+Participants upload the clips to their own C1410 in Part 2.4, so remove any existing clips from every C1410 first if you want the indexes to be 0, 1, 2. Put the three files on each workstation (for example on the desktop).
 
 ### 2.4 AXIS Camera Station Pro and the A1601
 
@@ -110,16 +122,22 @@ Participants upload the clips themselves in Part 2.4, so remove any existing cli
 
 Import it into the same Node-RED as the lab flow.
 
-### 2.6 Dry run
+### 2.6 Dry run checklist
 
-On one workstation, import the reference solution and run the seven tests in section 6 of the guide with the real devices:
+The reference solution was tested in Node-RED 4.1 with Dashboard 2.0 against the simulator and a mock speaker. These parts can only be verified with the real hardware, so check them first:
+
+- [ ] The I8116-E publishes `Call/State` with the expected topic, and the payload path is `msg.payload.message.data.CallState` (Part 3).
+- [ ] ACS Pro *Send HTTP Notification* with method POST reaches `http://<workstation>:1880/acs/...` and gets a 200 back (Parts 4.2-4.4).
+- [ ] The External HTTPS trigger works from Node-RED: CA accepted, hostname or **Server Name** correct, Basic or Digest authentication (Part 4.10).
+- [ ] Two groups with their own `UnlockDoor_G<n>` triggers can both unlock AEC main.
+- [ ] Time a full run of Part 4 by someone who hasn't seen it before.
+
+Then run the full acceptance test on one workstation:
 
 1. Import [solution/part4-5-smart-entrance.json](solution/part4-5-smart-entrance.json) (Parts 1-3 are in the same folder).
-2. Replace `C1410_IP` and `ACS_PRO_IP`, enter credentials in every HTTP Request node, and upload the ACS Pro CA in the **ACS Pro CA** TLS configuration.
-3. Run the tests.
-4. Reset the workstation afterwards (see 3.1).
-
-The reference solution was tested in Node-RED 4.1 with Dashboard 2.0 against the simulator and a mock speaker. The ACS Pro HTTPS call itself could not be tested without a server.
+2. Replace `C1410_IP`, `ACS_PRO_IP` and the trigger name, enter credentials in every HTTP Request node, and upload the ACS Pro CA in the **ACS Pro CA** TLS configuration.
+3. Run the seven tests in section 6 of the guide.
+4. Reset the workstation afterwards (see 3.1) and delete the test rules in ACS Pro.
 
 ### 2.7 Cards
 
@@ -137,7 +155,7 @@ Fill in [instructor/participant-card.md](instructor/participant-card.md) for eac
 
 On each workstation: `Reset_Workshop.bat` (Windows) or `./reset_workshop.sh` (macOS/Linux). This deletes all participant flows and restores the starter flow.
 
-ACS Pro action rules created by participants are **not** reset by this. Remove them in ACS Pro between sessions.
+ACS Pro action rules created by participants are **not** reset by this. Remove them in ACS Pro between sessions: they all start with `G<n> -`.
 
 ---
 
@@ -153,7 +171,7 @@ The guides in this repo are based on *AXIS_Bootcamp_Integration_Workshop.docx*, 
 | 4.5 | The explanation of "stop after first match" is written twice. | Merged into one paragraph. |
 | 4.10 | "Se Basic restituisce 401..." appears twice. | Removed the duplicate. |
 | 5.2 | "Aggiungi un nodo ui-page": in Dashboard 2.0, ui-page is a configuration node, not a palette node. | Created from a widget's **Group** field. |
-| 4.9 | Several groups using the same trigger name `UnlockDoor` on one ACS Pro server would collide. | Name from the card, unique per group. |
+| 4.9 | Several groups using the same trigger name `UnlockDoor` on one ACS Pro server would collide. | `UnlockDoor_G<n>` from the card, unique per group. Rule names prefixed with `G<n> -`. |
 | 2.3 | Files named `01_Doorbell.mp3` etc. | Uses the prepared `0-doorbell.wav` etc. Rename either side if you prefer MP3. |
 
 ---

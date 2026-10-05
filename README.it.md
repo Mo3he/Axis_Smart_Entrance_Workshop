@@ -47,7 +47,7 @@ Il laboratorio segue una difficoltà crescente: prima impari a muoverti in Node-
 - Node-RED raggiungibile dal browser, normalmente su `http://NODE_RED_IP:1880`.
 - Un broker MQTT raggiungibile da Node-RED e dall'AXIS Intercom (in questo laboratorio gira sulla stessa macchina di Node-RED).
 - AXIS Camera Station Pro con AXIS A1601 già aggiunto e la porta **AEC main** disponibile per il test.
-- AXIS Intercom configurabile con MQTT.
+- AXIS I8116-E Network Video Intercom configurabile con MQTT.
 - AXIS C1410 Network Mini Speaker raggiungibile via browser.
 - IP, username e password di laboratorio per ogni dispositivo.
 - Tre file audio brevi forniti dal formatore: campanello, porta da chiudere, porta forzata.
@@ -66,6 +66,9 @@ Usa sempre i valori della scheda del partecipante. I valori riportati qui servon
 | Intercom | `INTERCOM_IP` | da scheda laboratorio |
 | Intercom seriale | `INTERCOM_SERIAL` | `B8A44F0B1CF0` |
 | MQTT broker | `MQTT_BROKER_IP` | lo stesso IP di Node-RED (`NODE_RED_IP`) |
+| Numero del gruppo | `<n>` | da scheda laboratorio, ad esempio `1` |
+
+> **Più gruppi, un solo ACS Pro:** tutti i gruppi lavorano sullo stesso server ACS Pro e sulla stessa porta AEC main. Inizia il nome di ogni Action Rule con `G<n> -` e usa il trigger `UnlockDoor_G<n>`, così le regole dei gruppi non si confondono.
 
 ---
 
@@ -291,7 +294,7 @@ Da qui inizia il flow applicativo completo. Costruirai i collegamenti tra ACS Pr
 ### 4.2 Porta → ACS Pro → Node-RED: Door open too long
 
 1. In ACS Pro vai in **Configuration → Recording and events → Action rules**.
-2. Crea una nuova Action Rule.
+2. Crea una nuova Action Rule chiamata `G<n> - Door open too long`.
 3. Sotto **Triggers** scegli **Device event** e seleziona l'AXIS A1601.
 4. Come evento seleziona **Door open too long**.
 5. Aggiungi l'azione **Send HTTP Notification**.
@@ -319,7 +322,7 @@ Da qui inizia il flow applicativo completo. Costruirai i collegamenti tra ACS Pr
 
 ### 4.4 Ripeti per Door forced
 
-1. In ACS Pro crea una seconda Action Rule con trigger **AXIS A1601 → Door forced**.
+1. In ACS Pro crea una seconda Action Rule chiamata `G<n> - Door forced`, con trigger **AXIS A1601 → Door forced**.
 2. Aggiungi **Send HTTP Notification**.
 3. URL = `http://NODE_RED_IP:1880/acs/door-forced`, Method = `POST`.
 4. In Node-RED crea **HTTP In** con `POST` e URL `/acs/door-forced`.
@@ -422,14 +425,14 @@ Cosa fa il codice, riga per riga:
 ### 4.9 Crea lo sblocco porta tramite ACS Pro
 
 1. In ACS Pro vai in **Configuration → Recording and events → Action rules**.
-2. Crea una nuova Action Rule.
+2. Crea una nuova Action Rule chiamata `G<n> - Unlock door`.
 3. Sotto **Triggers** seleziona **External HTTPS**.
-4. Imposta **Trigger name** = `UnlockDoor` (o il nome indicato sulla scheda, se più gruppi condividono lo stesso server ACS Pro).
+4. Imposta **Trigger name** = `UnlockDoor_G<n>` (ad esempio `UnlockDoor_G1`).
 5. Salva il trigger.
 6. Nella stessa regola aggiungi l'azione **Access Control**.
 7. Seleziona la porta da comandare. Il nome visualizzato dipende dalla configurazione del sito.
 8. Come Action seleziona **Access**.
-9. Salva la regola e verifica che il trigger `UnlockDoor` e l'azione Access Control siano presenti nella stessa Action Rule.
+9. Salva la regola e verifica che il trigger `UnlockDoor_G<n>` e l'azione Access Control siano presenti nella stessa Action Rule.
 
 ### 4.10 Costruisci il comando HTTPS in Node-RED
 
@@ -443,11 +446,11 @@ Poi in Node-RED:
 
 1. Crea un nodo **Inject** per il test.
 2. Crea un Function node chiamato `Build ACS Pro trigger URL`.
-3. Incolla il codice seguente e sostituisci solo `ACS_PRO_IP` con l'IP del server ACS Pro:
+3. Incolla il codice seguente e sostituisci `ACS_PRO_IP` con l'IP del server ACS Pro e `UnlockDoor_G1` con il nome del trigger del tuo gruppo:
 
    ```javascript
    const host = 'ACS_PRO_IP';
-   const triggerName = 'UnlockDoor';
+   const triggerName = 'UnlockDoor_G1';
    msg.method = 'GET';
    msg.url = 'https://' + host + ':29204/Acs/Api/TriggerFacade/PulseTrigger?' + JSON.stringify({ triggerName });
    msg.payload = '';
@@ -533,6 +536,8 @@ http://NODE_RED_IP:1880/dashboard
 ## 6. Collaudo finale
 
 Esegui i test in questo ordine. Non testare tutto insieme: il laboratorio deve permettere di capire esattamente quale blocco ha smesso di funzionare.
+
+> I test 5 e 6 usano la porta condivisa: li esegue il formatore per tutta l'aula. Ogni gruppo deve vedere l'evento nel proprio log e sentire la clip sul proprio C1410.
 
 | Test | Azione | Risultato atteso |
 |---|---|---|

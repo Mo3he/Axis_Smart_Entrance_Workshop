@@ -12,10 +12,11 @@ Stampare una per gruppo e compilare prima della sessione. / Print one per group 
 | MQTT broker | `MQTT_BROKER_IP` | |
 | AXIS Camera Station Pro | `ACS_PRO_IP` | |
 | ACS Pro HTTPS port | `ACS_PRO_HTTPS_PORT` | 29204 |
-| Nome trigger / Trigger name | | UnlockDoor |
+| Nome trigger / Trigger name | | UnlockDoor_G__ |
+| Prefisso regole ACS Pro / ACS Pro rule prefix | | G__ - |
 | Telecamera / Camera (Parte 1) | `CAMERA_IP` | |
 | AXIS C1410 | `C1410_IP` | |
-| AXIS Intercom | `INTERCOM_IP` | |
+| AXIS I8116-E | `INTERCOM_IP` | |
 | Seriale intercom / Intercom serial | `INTERCOM_SERIAL` | |
 
 ## Credenziali / Credentials

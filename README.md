@@ -47,7 +47,7 @@ The lab gets progressively harder: first you learn to find your way in Node-RED,
 - Node-RED reachable from the browser, normally at `http://NODE_RED_IP:1880`.
 - An MQTT broker reachable from Node-RED and from the AXIS Intercom (in this lab it runs on the same machine as Node-RED).
 - AXIS Camera Station Pro with an AXIS A1601 already added and the door **AEC main** available for testing.
-- An AXIS Intercom that can be configured with MQTT.
+- An AXIS I8116-E Network Video Intercom that can be configured with MQTT.
 - An AXIS C1410 Network Mini Speaker reachable from the browser.
 - Lab IP address, username and password for every device.
 - Three short audio files provided by the instructor: doorbell, close the door, door forced.
@@ -66,6 +66,9 @@ Always use the values on your participant card. The values here only show the fo
 | Intercom | `INTERCOM_IP` | from the lab card |
 | Intercom serial | `INTERCOM_SERIAL` | `B8A44F0B1CF0` |
 | MQTT broker | `MQTT_BROKER_IP` | the same IP as Node-RED (`NODE_RED_IP`) |
+| Group number | `<n>` | from the lab card, for example `1` |
+
+> **Several groups, one ACS Pro:** all groups work on the same ACS Pro server and the same door, AEC main. Start the name of every action rule with `G<n> -` and use the trigger `UnlockDoor_G<n>`, so the groups' rules don't get mixed up.
 
 ---
 
@@ -291,7 +294,7 @@ This is where the full application flow starts. You connect ACS Pro, the AXIS In
 ### 4.2 Door → ACS Pro → Node-RED: Door open too long
 
 1. In ACS Pro go to **Configuration → Recording and events → Action rules**.
-2. Create a new action rule.
+2. Create a new action rule called `G<n> - Door open too long`.
 3. Under **Triggers** choose **Device event** and select the AXIS A1601.
 4. Select the event **Door open too long**.
 5. Add the action **Send HTTP Notification**.
@@ -319,7 +322,7 @@ This is where the full application flow starts. You connect ACS Pro, the AXIS In
 
 ### 4.4 Repeat for Door forced
 
-1. In ACS Pro create a second action rule with trigger **AXIS A1601 → Door forced**.
+1. In ACS Pro create a second action rule called `G<n> - Door forced`, with trigger **AXIS A1601 → Door forced**.
 2. Add **Send HTTP Notification**.
 3. URL = `http://NODE_RED_IP:1880/acs/door-forced`, Method = `POST`.
 4. In Node-RED create **HTTP In** with `POST` and URL `/acs/door-forced`.
@@ -424,14 +427,14 @@ What the code does, line by line:
 ### 4.9 Create the door unlock in ACS Pro
 
 1. In ACS Pro go to **Configuration → Recording and events → Action rules**.
-2. Create a new action rule.
+2. Create a new action rule called `G<n> - Unlock door`.
 3. Under **Triggers** select **External HTTPS**.
-4. Set **Trigger name** = `UnlockDoor` (or the name on your card, if several groups share the same ACS Pro server).
+4. Set **Trigger name** = `UnlockDoor_G<n>` (for example `UnlockDoor_G1`).
 5. Save the trigger.
 6. In the same rule, add the action **Access Control**.
 7. Select the door to control. The displayed name depends on the site configuration.
 8. Select the action **Access**.
-9. Save the rule and check that the `UnlockDoor` trigger and the Access Control action are in the same action rule.
+9. Save the rule and check that the `UnlockDoor_G<n>` trigger and the Access Control action are in the same action rule.
 
 ### 4.10 Build the HTTPS command in Node-RED
 
@@ -445,11 +448,11 @@ Then in Node-RED:
 
 1. Create an **Inject** node for testing.
 2. Create a Function node called `Build ACS Pro trigger URL`.
-3. Paste this code and replace only `ACS_PRO_IP` with the ACS Pro server IP:
+3. Paste this code and replace `ACS_PRO_IP` with the ACS Pro server IP and `UnlockDoor_G1` with your group's trigger name:
 
    ```javascript
    const host = 'ACS_PRO_IP';
-   const triggerName = 'UnlockDoor';
+   const triggerName = 'UnlockDoor_G1';
    msg.method = 'GET';
    msg.url = 'https://' + host + ':29204/Acs/Api/TriggerFacade/PulseTrigger?' + JSON.stringify({ triggerName });
    msg.payload = '';
@@ -535,6 +538,8 @@ http://NODE_RED_IP:1880/dashboard
 ## 6. Final acceptance test
 
 Run the tests in this order. Don't test everything at once: the lab must make it clear exactly which block stopped working.
+
+> Tests 5 and 6 use the shared door: the instructor runs them for the whole room. Every group should see the event in its own log and hear the clip on its own C1410.
 
 | Test | Action | Expected result |
 |---|---|---|
