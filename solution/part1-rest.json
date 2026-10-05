@@ -1,0 +1,61 @@
+[
+    {
+        "id": "f2a0000000000011",
+        "type": "tab",
+        "label": "Parte 1 - REST",
+        "disabled": false,
+        "info": "Reference solution for Part 1. Replace CAMERA_IP and enter username/password in the HTTP Request node."
+    },
+    {
+        "id": "a1b0000000000001",
+        "type": "inject",
+        "z": "f2a0000000000011",
+        "name": "Read device info",
+        "props": [],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 140,
+        "y": 80,
+        "wires": [["a1b0000000000002"]]
+    },
+    {
+        "id": "a1b0000000000002",
+        "type": "http request",
+        "z": "f2a0000000000011",
+        "name": "GET param.cgi Brand",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "http://CAMERA_IP/axis-cgi/param.cgi?action=list&group=Brand",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "digest",
+        "senderr": false,
+        "headers": [],
+        "x": 360,
+        "y": 80,
+        "wires": [["a1b0000000000003"]]
+    },
+    {
+        "id": "a1b0000000000003",
+        "type": "debug",
+        "z": "f2a0000000000011",
+        "name": "Response",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "statusCode",
+        "statusType": "msg",
+        "x": 570,
+        "y": 80,
+        "wires": []
+    }
+]

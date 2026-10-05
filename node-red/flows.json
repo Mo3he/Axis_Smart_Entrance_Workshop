@@ -1,25 +1,8 @@
 [
     {
-        "id": "f1a0000000000001",
-        "type": "tab",
-        "label": "Lab",
-        "disabled": false,
-        "info": "Build your flows here. Follow the README, starting with Part 0."
-    },
-    {
-        "id": "c0a0000000000001",
-        "type": "comment",
-        "z": "f1a0000000000001",
-        "name": "Start here: README, Part 0",
-        "info": "",
-        "x": 170,
-        "y": 40,
-        "wires": []
-    },
-    {
         "id": "b0b0000000000001",
         "type": "mqtt-broker",
-        "name": "Workshop broker",
+        "name": "Local broker",
         "broker": "${BROKER_HOST}",
         "port": "1883",
         "clientid": "",
@@ -50,7 +33,7 @@
     {
         "id": "d0b0000000000001",
         "type": "ui-base",
-        "name": "Lab dashboard",
+        "name": "Smart Entrance",
         "path": "/dashboard",
         "appIcon": "",
         "includeClientData": true,
@@ -70,7 +53,7 @@
     {
         "id": "d0b0000000000002",
         "type": "ui-theme",
-        "name": "Lab theme",
+        "name": "Axis theme",
         "colors": {
             "surface": "#ffffff",
             "primary": "#ffcc33",
@@ -85,53 +68,5 @@
             "groupBorderRadius": "4px",
             "widgetGap": "12px"
         }
-    },
-    {
-        "id": "d0b0000000000003",
-        "type": "ui-page",
-        "name": "Entrance",
-        "ui": "d0b0000000000001",
-        "path": "/entrance",
-        "icon": "door",
-        "layout": "grid",
-        "theme": "d0b0000000000002",
-        "breakpoints": [
-            { "name": "Default", "px": "0", "cols": "3" },
-            { "name": "Tablet", "px": "576", "cols": "6" },
-            { "name": "Small Desktop", "px": "768", "cols": "9" },
-            { "name": "Desktop", "px": "1024", "cols": "12" }
-        ],
-        "order": 1,
-        "className": "",
-        "visible": "true",
-        "disabled": "false"
-    },
-    {
-        "id": "d0b0000000000004",
-        "type": "ui-group",
-        "name": "Door",
-        "page": "d0b0000000000003",
-        "width": "4",
-        "height": "1",
-        "order": 1,
-        "showTitle": true,
-        "className": "",
-        "visible": "true",
-        "disabled": "false",
-        "groupType": "default"
-    },
-    {
-        "id": "d0b0000000000005",
-        "type": "ui-group",
-        "name": "Events",
-        "page": "d0b0000000000003",
-        "width": "8",
-        "height": "1",
-        "order": 2,
-        "showTitle": true,
-        "className": "",
-        "visible": "true",
-        "disabled": "false",
-        "groupType": "default"
     }
 ]

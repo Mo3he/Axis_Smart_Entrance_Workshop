@@ -1,15 +1,15 @@
 [
     {
-        "id": "f1a0000000000021",
+        "id": "f2a0000000000021",
         "type": "tab",
-        "label": "Part 2 - VAPIX",
+        "label": "Parte 2 - VAPIX",
         "disabled": false,
-        "info": "Fallback for Part 2. Replace C1410_IP and enter the device username/password in both HTTP request nodes."
+        "info": "Reference solution for Part 2. Replace C1410_IP and enter username/password in both HTTP Request nodes."
     },
     {
-        "id": "a2a0000000000001",
+        "id": "a2b0000000000001",
         "type": "inject",
-        "z": "f1a0000000000021",
+        "z": "f2a0000000000021",
         "name": "List clips",
         "props": [],
         "repeat": "",
@@ -19,13 +19,13 @@
         "topic": "",
         "x": 120,
         "y": 80,
-        "wires": [["a2a0000000000002"]]
+        "wires": [["a2b0000000000002"]]
     },
     {
-        "id": "a2a0000000000002",
+        "id": "a2b0000000000002",
         "type": "http request",
-        "z": "f1a0000000000021",
-        "name": "GET clip list (C1410)",
+        "z": "f2a0000000000021",
+        "name": "GET MediaClip list",
         "method": "GET",
         "ret": "txt",
         "paytoqs": "ignore",
@@ -37,31 +37,31 @@
         "authType": "digest",
         "senderr": false,
         "headers": [],
-        "x": 330,
+        "x": 320,
         "y": 80,
-        "wires": [["a2a0000000000003"]]
+        "wires": [["a2b0000000000003"]]
     },
     {
-        "id": "a2a0000000000003",
+        "id": "a2b0000000000003",
         "type": "debug",
-        "z": "f1a0000000000021",
+        "z": "f2a0000000000021",
         "name": "Clip list",
         "active": true,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
-        "complete": "payload",
-        "targetType": "msg",
+        "complete": "true",
+        "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 540,
+        "x": 520,
         "y": 80,
         "wires": []
     },
     {
-        "id": "a2a0000000000004",
+        "id": "a2b0000000000004",
         "type": "inject",
-        "z": "f1a0000000000021",
+        "z": "f2a0000000000021",
         "name": "Play clip 0",
         "props": [],
         "repeat": "",
@@ -71,13 +71,13 @@
         "topic": "",
         "x": 120,
         "y": 160,
-        "wires": [["a2a0000000000005"]]
+        "wires": [["a2b0000000000005"]]
     },
     {
-        "id": "a2a0000000000005",
+        "id": "a2b0000000000005",
         "type": "http request",
-        "z": "f1a0000000000021",
-        "name": "Play clip (C1410)",
+        "z": "f2a0000000000021",
+        "name": "Play clip 0 (C1410)",
         "method": "GET",
         "ret": "txt",
         "paytoqs": "ignore",
@@ -91,12 +91,12 @@
         "headers": [],
         "x": 320,
         "y": 160,
-        "wires": [["a2a0000000000006"]]
+        "wires": [["a2b0000000000006"]]
     },
     {
-        "id": "a2a0000000000006",
+        "id": "a2b0000000000006",
         "type": "debug",
-        "z": "f1a0000000000021",
+        "z": "f2a0000000000021",
         "name": "Play response",
         "active": true,
         "tosidebar": true,
@@ -106,7 +106,7 @@
         "targetType": "full",
         "statusVal": "statusCode",
         "statusType": "msg",
-        "x": 540,
+        "x": 530,
         "y": 160,
         "wires": []
     }

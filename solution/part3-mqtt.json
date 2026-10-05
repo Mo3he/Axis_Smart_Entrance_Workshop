@@ -1,0 +1,43 @@
+[
+    {
+        "id": "f2a0000000000031",
+        "type": "tab",
+        "label": "Parte 3 - MQTT",
+        "disabled": false,
+        "info": "Reference solution for Part 3. Uses the preconfigured Local broker."
+    },
+    {
+        "id": "a3b0000000000001",
+        "type": "mqtt in",
+        "z": "f2a0000000000031",
+        "name": "Intercom events",
+        "topic": "axis/intercom/#",
+        "qos": "1",
+        "datatype": "auto-detect",
+        "broker": "b0b0000000000001",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 140,
+        "y": 80,
+        "wires": [["a3b0000000000002"]]
+    },
+    {
+        "id": "a3b0000000000002",
+        "type": "debug",
+        "z": "f2a0000000000031",
+        "name": "Intercom message",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 360,
+        "y": 80,
+        "wires": []
+    }
+]

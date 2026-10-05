@@ -1,43 +1,40 @@
-# Participant card / Scheda partecipante
+# Scheda partecipante / Participant card
 
-Print one per group and fill in before the session. / Stampare una per gruppo e compilare prima della sessione.
+Stampare una per gruppo e compilare prima della sessione. / Print one per group and fill in before the session.
 
-**Group / Gruppo:** ______
+**Gruppo / Group:** ______
 
-## Devices / Dispositivi
+## Parametri / Parameters
 
-| Device / Dispositivo | Placeholder | IP address / Indirizzo IP |
+| Parametro / Parameter | Placeholder | Valore / Value |
 |---|---|---|
-| AXIS P1475-LE (camera / telecamera) | `CAMERA_IP` | |
-| AXIS C1410 (your speaker / il tuo speaker) | `C1410_IP` | |
-| AXIS A1210 (door controller / controller porta) | `A1210_IP` | |
-| AXIS I8116-E (intercom / citofono) | - | |
+| Node-RED (questa postazione / this workstation) | `NODE_RED_IP` | |
+| MQTT broker | `MQTT_BROKER_IP` | |
+| AXIS Camera Station Pro | `ACS_PRO_IP` | |
+| ACS Pro HTTPS port | `ACS_PRO_HTTPS_PORT` | 29204 |
+| Nome trigger / Trigger name | | UnlockDoor |
+| Telecamera / Camera (Parte 1) | `CAMERA_IP` | |
+| AXIS C1410 | `C1410_IP` | |
+| AXIS Intercom | `INTERCOM_IP` | |
+| Seriale intercom / Intercom serial | `INTERCOM_SERIAL` | |
 
-| | |
-|---|---|
-| Username | |
-| Password | |
-| Door token / Token della porta (`DOOR_TOKEN`) | |
+## Credenziali / Credentials
 
-## Audio clips on the C1410 / Clip audio sul C1410
+| Sistema / System | Username | Password |
+|---|---|---|
+| Dispositivi Axis / Axis devices | | |
+| AXIS Camera Station Pro | | |
 
-| Clip | Content / Contenuto |
-|---|---|
-| 0 | Doorbell / Campanello: "Din don. C'è un visitatore all'ingresso." |
-| 1 | "Attenzione, la porta è rimasta aperta. Chiudere la porta, per favore." |
-| 2 | "Allarme. Porta forzata." |
-| 3 | "Attenzione. Quest'area è videosorvegliata." |
-| 4 | "Una persona alla volta, per favore." |
+## Clip audio / Audio clips
 
-## MQTT
+| Clip | File | Uso / Used for |
+|---|---|---|
+| 0 | `0-doorbell.wav` | Chiamata Intercom / Intercom call |
+| 1 | `1-close-door.wav` | Porta aperta troppo a lungo / Door open too long |
+| 2 | `2-door-forced.wav` | Porta forzata / Door forced |
 
-| | |
-|---|---|
-| Broker | Already configured in Node-RED as `Workshop broker` / Già configurato in Node-RED come `Workshop broker` |
-| Topics | `lab/entrance/intercom`, `lab/entrance/door`, `lab/entrance/camera` |
+## Link
 
-## Links
-
-- Node-RED: <http://localhost:1880>
-- Dashboard: <http://localhost:1880/dashboard>
+- Node-RED: `http://NODE_RED_IP:1880`
+- Dashboard: `http://NODE_RED_IP:1880/dashboard`
 - VAPIX: <https://developer.axis.com/vapix/>

@@ -1,451 +1,581 @@
-# Axis Device Integration Lab: Smart Entrance
+# AXIS Smart Entrance
+
+**Hands-on lab • 60 minutes**
 
 **English** | [Italiano](README.it.md)
 
-Hands-on lab for the course *Integrazione di dispositivi Axis con API, MQTT e Node-RED*.
-It follows the 30-minute theory presentation and takes **60 minutes**.
+**Goal:** build, from scratch, an integration that receives events from devices, performs an action and makes the result visible. Every block follows the same sequence: **concept → configuration → test → verification**.
 
-You will connect four Axis devices with Node-RED and build the chain the course is about:
-
-**event → action → visualization**
+## Lab architecture
 
 ```text
-AXIS I8116-E  (intercom)        ─┐
-AXIS A1210    (door controller) ─┼─ MQTT ─► Node-RED ─┬─► AXIS C1410 (plays a sound)   REST
-AXIS P1475-LE (camera)          ─┘                    ├─► AXIS A1210 (unlocks a door)  REST
-                                                      └─► Dashboard
+AXIS A1601 ──► AXIS Camera Station Pro ── HTTP POST ──┐
+                                                       ├──► Node-RED ──┬──► AXIS C1410 (audio clips, VAPIX)
+AXIS Intercom ── MQTT (Call/State) ──► broker ────────┘                ├──► Dashboard
+                                                                        └──► ACS Pro (HTTPS) ──► door unlock
 ```
 
-| Device | Role in the lab |
-|---|---|
-| AXIS I8116-E Network Video Intercom | Someone presses the call button → event |
-| AXIS A1210 Network Door Controller | Door opened, held open, forced, access granted/denied → events. Can be unlocked over REST. |
-| AXIS P1475-LE Bullet Camera | Person detected by AXIS Object Analytics → event |
-| AXIS C1410 Network Mini Speaker | Plays audio clips on request over REST |
+### Lab objectives
+
+- Build a small Smart Entrance integration by hand, starting from an empty Node-RED page.
+- Learn step by step how to read a message, call an Axis API, look things up in the VAPIX documentation and receive MQTT events.
+- Then connect ACS Pro, AXIS Intercom, AXIS C1410 and a dashboard in one flow: **event → action → visualization**.
+
+> **Lab rule:** after every block, **Deploy → generate an event → check Debug** → only then move to the next step.
+
+### Structure
+
+| Part | What you learn | Difficulty |
+|---|---|---|
+| [0](#part-0-node-red-in-5-minutes) | Node-RED: nodes, wires, `msg.payload`, Deploy and Debug | ● |
+| [1](#part-1-rest-and-authentication) | REST, URLs, HTTP status codes and Digest authentication | ●● |
+| [2](#part-2-vapix-and-audio-clips-on-the-c1410) | VAPIX: searching the documentation and managing audio clips on the C1410 | ●●● |
+| [3](#part-3-mqtt) | MQTT: broker, topics, payload and wildcards; the intercom Call/State event | ●●● |
+| [4](#part-4-integrate-acs-pro--intercom--c1410) | Real integration: ACS Pro + Intercom + C1410 + unlock through ACS Pro | ●●●● |
+| [5](#part-5-node-red-dashboard) | Node-RED dashboard: last event, log and unlock command | ●●●●● |
+
+> **Important:** the final flow is not imported. All main nodes are built from scratch by following this guide.
 
 ---
 
-## Before you start
+## 0. Before you start
 
-Everything is already installed and running. You only need:
+The lab gets progressively harder: first you learn to find your way in Node-RED, then you verify REST and authentication, look up APIs in the VAPIX documentation and finally work with MQTT. Only when these are clear do you build the full integration in Part 4.
 
-- A browser with **Node-RED** open at <http://localhost:1880>
-- Your **participant card** with device IP addresses, username/password, clip numbers and the door token
+### 0.1 What you need
 
-Every time this guide shows a placeholder such as `CAMERA_IP` or `C1410_IP`, replace it with the value from your card.
+- Node-RED reachable from the browser, normally at `http://NODE_RED_IP:1880`.
+- An MQTT broker reachable from Node-RED and from the AXIS Intercom (in this lab it runs on the same machine as Node-RED).
+- AXIS Camera Station Pro with an AXIS A1601 already added and the door **AEC main** available for testing.
+- An AXIS Intercom that can be configured with MQTT.
+- An AXIS C1410 Network Mini Speaker reachable from the browser.
+- Lab IP address, username and password for every device.
+- Three short audio files provided by the instructor: doorbell, close the door, door forced.
 
-### Agenda
+### Lab parameters
 
-| Time | Part | Topic from the presentation |
+Always use the values on your participant card. The values here only show the format.
+
+| Parameter | Placeholder | Example |
 |---|---|---|
-| 0-5 | [Part 0: Node-RED in 5 minutes](#part-0-node-red-in-5-minutes) | Node-RED |
-| 5-15 | [Part 1: REST and authentication](#part-1-rest-and-authentication) | REST API, HTTP codes, Digest |
-| 15-25 | [Part 2: Find it in the VAPIX documentation](#part-2-find-it-in-the-vapix-documentation) | VAPIX |
-| 25-35 | [Part 3: MQTT](#part-3-mqtt) | Publish/subscribe, topics, QoS |
-| 35-48 | [Part 4: Event → action](#part-4-event--action) | Integration logic |
-| 48-60 | [Part 5: Visualization](#part-5-visualization) | Dashboard |
-
-Each part follows the same method as the presentation: **Concept → Axis example → Build → Verify**.
-
-> **Falling behind?** Every part has a ready-made flow in the [flows](flows) folder. See [Fallback flows](#fallback-flows).
+| Node-RED | `NODE_RED_IP` | `172.20.148.200` |
+| ACS Pro | `ACS_PRO_IP` | `172.20.148.213` |
+| ACS Pro HTTPS | `ACS_PRO_HTTPS_PORT` | `29204` |
+| C1410 | `C1410_IP` | from the lab card |
+| Camera (Part 1) | `CAMERA_IP` | from the lab card |
+| Intercom | `INTERCOM_IP` | from the lab card |
+| Intercom serial | `INTERCOM_SERIAL` | `B8A44F0B1CF0` |
+| MQTT broker | `MQTT_BROKER_IP` | the same IP as Node-RED (`NODE_RED_IP`) |
 
 ---
 
 ## Part 0: Node-RED in 5 minutes
 
-**Concept.** A Node-RED *flow* is a chain of *nodes* connected by *wires*. A message (`msg`) travels from left to right. Its main content is `msg.payload`.
+A Node-RED flow is simply a sequence of connected nodes. A message travels from left to right and, in most cases, the data you care about is `msg.payload`. In this lab you build the flow starting from an empty tab.
 
-**Build.**
+### 0.1 Create your first flow
 
-1. Open <http://localhost:1880>. You are on the **Lab** tab.
-2. From the palette on the left (category *common*), drag an **inject** node onto the canvas.
-3. Drag a **debug** node to the right of it.
-4. Connect them: drag from the small grey square on the right of *inject* to the square on the left of *debug*.
-5. Click the red **Deploy** button (top right).
-6. Open the **Debug** sidebar (the bug icon on the right).
-7. Click the square button on the left side of the *inject* node.
+1. Open Node-RED in the browser: `http://NODE_RED_IP:1880`.
+2. Create a new tab called `Smart Entrance`.
+3. Drag an **Inject** node from the palette.
+4. Drag a **Debug** node to its right.
+5. Connect the output of Inject to the input of Debug.
+6. Open Debug and set the output to `complete msg object`.
+7. Click **Deploy**.
+8. Press the button on the Inject node.
 
-**Verify.** A number (a timestamp) appears in the Debug sidebar. That is `msg.payload`.
+> **Verify:** the message appears in the Debug panel and `msg.payload` contains the value generated by Inject.
 
-> Remember: **nothing changes until you click Deploy.**
+### 0.2 Learn the most important rule
+
+When you change a node, always click **Deploy** before testing. It sounds obvious, but Node-RED is not telepathic and this guide prefers not to rely on magic.
+
+| Element | Meaning |
+|---|---|
+| Inject | Generates or simulates a message |
+| Wire | Carries the message to the next node |
+| Debug | Shows what is really travelling through the flow |
+| `msg.payload` | Main content of the message |
+| Deploy | Applies your changes to the flow |
 
 ---
 
 ## Part 1: REST and authentication
 
-**Concept.** A REST call is a request (method + URL + headers + body) and a response (status code + body). Axis devices normally use **HTTP Digest** authentication.
+Before building the integration you need to be able to verify an HTTP request without involving MQTT, ACS Pro or the dashboard. In this part you work first on simple endpoints, then on authentication, and finally on status codes.
 
-**Axis example.** `param.cgi` reads device parameters:
+### 1.1 Test an Axis API from the browser
 
 ```text
-GET http://CAMERA_IP/axis-cgi/param.cgi?action=list&group=Brand
+http://CAMERA_IP/axis-cgi/param.cgi?action=list&group=Brand
 ```
 
-### 1.1 Try it in the browser
+1. Replace `CAMERA_IP` with the IP address of a lab Axis camera.
+2. Open the URL in the browser.
+3. Enter the requested credentials.
+4. Check the result: you should see text lines like `root.Brand.ProdNbr=...`
 
-1. Open a new browser tab and go to `http://CAMERA_IP/axis-cgi/param.cgi?action=list&group=Brand`
-2. Log in with the username and password from your card.
-3. You get plain text lines, for example `root.Brand.ProdNbr=P1475-LE`.
+> **Verify:** you just made a GET request. The browser handled authentication for you and showed the response body.
 
-### 1.2 Same call from Node-RED
+### 1.2 Make the same call from Node-RED
 
-1. Drag an **inject** node, name it `Read device info`.
-2. Drag an **http request** node (category *network*) and double-click it:
-   - **Method**: `GET`
-   - **URL**: `http://CAMERA_IP/axis-cgi/param.cgi?action=list&group=Brand`
-   - Tick **Use authentication**, **Type**: `digest authentication`
-   - **Username** / **Password**: from your card
-   - **Return**: `a UTF-8 string`
-   - **Name**: `GET param.cgi (camera)`
-3. Drag a **debug** node, set **Output** to `complete msg object`.
-4. Wire inject → http request → debug, then **Deploy** and click the inject button.
+1. Create an **Inject** node called `Read device info`.
+2. Create an **HTTP Request** node.
+3. Set **Method** = `GET`.
+4. Enter the same URL you used in the browser.
+5. Turn on **Use authentication**.
+6. Select `digest authentication`.
+7. Enter the username and password from your card.
+8. Set **Return** = `a UTF-8 string`.
+9. Create a **Debug** node with **Output** = `complete msg object`.
+10. Wire Inject → HTTP Request → Debug and click **Deploy**.
 
-**Verify.** In the Debug sidebar, expand the message: `statusCode` is **200** and `payload` contains the `root.Brand...` lines.
+### 1.3 Understand the errors
 
-### 1.3 Break it on purpose
-
-Read the status code first, then the body (as in the presentation).
-
-| Change | Expected result | What it tells you |
+| Change | Expected result | Meaning |
 |---|---|---|
-| Untick **Use authentication**, Deploy, inject | `statusCode: 401` | Credentials missing or wrong |
-| Change `param.cgi` to `paramm.cgi` | `statusCode: 404` | Wrong endpoint |
-| Restore both | `statusCode: 200` | |
+| Turn off authentication | `401` | Missing credentials or wrong auth method |
+| Type `paramm.cgi` instead of `param.cgi` | `404` | Wrong endpoint |
+| Restore everything | `200` | Correct request |
 
-### 1.4 Read something else
-
-Change `group=Brand` to `group=Properties.Firmware` and inject again. You now see the firmware version.
-
-**Debugging order for REST:** network → URL → authentication → method → payload → response.
-
-> **Extra (if you have time):** add a **function** node between http request and a new debug node to turn the text into an object. The code is in [flows/part1-rest.json](flows/part1-rest.json) (node *Text to object*).
+> **Troubleshooting method:** always follow this order: network → URL → authentication → method → payload → response.
 
 ---
 
-## Part 2: Find it in the VAPIX documentation
+## Part 2: VAPIX and audio clips on the C1410
 
-**Concept.** You don't need to know every endpoint by heart. You need to know how to **look it up**.
+Here you learn to look up an API instead of memorizing it. The VAPIX **Media clip API** documentation lets you list, upload, play, update, download and remove audio clips on the device.
 
-**Your task.** Make the **C1410** speaker play a sound.
+### 2.1 Open the right documentation
 
-### 2.1 Search the documentation
+1. Open <https://developer.axis.com/vapix/>.
+2. Search for **Media clip API**.
+3. Find the three things you need today: how to **list** clips, how to **upload** a clip and how to **play** it.
 
-1. Open <https://developer.axis.com/vapix/> and search for **Media clip API**.
-2. Find the answers to these questions:
-   - How do I **list** the clips stored on the device? *(Hint: you already know this CGI from Part 1.)*
-   - How do I **play** a clip? Which **method** and which **parameter**?
-   - Which **authentication** and **user level** are required?
+Don't try to memorize the commands. Learn how to find them again.
 
-### 2.2 List the clips
+> **Quick reference:** audio clips are managed with `/axis-cgi/mediaclip.cgi`. The documentation uses `GET` for every action except `upload`, which uses `POST` with `multipart/form-data`.
 
-1. Build inject → http request → debug, as in Part 1:
-   - **URL**: `http://C1410_IP/axis-cgi/param.cgi?action=list&group=MediaClip`
-   - Digest authentication with the credentials from your card
-2. Deploy and inject.
+### 2.2 First check what is already on the speaker
 
-**Verify.** You see lines such as `root.MediaClip.M0.Name=...`. The number after `M` is the **clip number**. Compare it with your card.
+```text
+http://C1410_IP/axis-cgi/param.cgi?action=list&group=MediaClip
+```
 
-### 2.3 Play a clip
+1. Build Inject → HTTP Request → Debug, as in Part 1.
+2. Set the URL above with `C1410_IP`.
+3. Use `digest authentication`.
+4. Click **Deploy** and press Inject.
+5. In Debug, look for lines like `root.MediaClip.M0.Name=...`
 
-1. Build a second inject → http request → debug:
-   - **URL**: `http://C1410_IP/axis-cgi/mediaclip.cgi?action=play&clip=0`
-   - Digest authentication
-   - Debug **Output**: `complete msg object`
-2. Deploy and inject.
+> **Verify:** write down the number of the clip you will use. The index `M0`/`M1`/`M2` is the number to use in the play API.
 
-**Verify.** The speaker plays the doorbell sound and the response starts with `OK`.
+### 2.3 The three lab clips
 
-Now try a clip number that does not exist (for example `clip=9`). Look at the status code and the body: the device tells you what went wrong.
+To reduce cognitive load, the instructor prepares the audio files and hands them out with the lab material. Participants focus on the integration, not on audio production.
+
+| Clip | File | Name | Used for | Suggested index |
+|---|---|---|---|---|
+| 0 | `0-doorbell.wav` | Doorbell | Intercom call | 0 |
+| 1 | `1-close-door.wav` | CloseDoor | Door open too long | 1 |
+| 2 | `2-door-forced.wav` | DoorForced | Door forced | 2 |
+
+> **Audio format:** the C1410 supports `.au`, `.mp3`, `.opus`, `.vorbis` and `.wav`. For the lab, use MP3 or WAV to keep things simple.
+
+### 2.4 Upload the clips from the C1410 web interface
+
+1. Open `https://C1410_IP` in the browser.
+2. Log in with the lab credentials.
+3. Open **Audio → Audio clips**.
+4. Select **Add clip**.
+5. Upload `0-doorbell.wav` and name it `Doorbell`.
+6. Repeat for `1-close-door.wav` (`CloseDoor`) and `2-door-forced.wav` (`DoorForced`).
+7. Play each clip from the Audio clips menu to check its content.
+8. Write down the index the device actually assigned.
+
+> **Verify:** the three clips are visible in the Audio clips library and can be played manually.
+
+### 2.5 Play a clip with VAPIX
+
+```text
+http://C1410_IP/axis-cgi/mediaclip.cgi?action=play&clip=0
+```
+
+1. Create a second Inject → HTTP Request → Debug.
+2. Set **Method** = `GET`.
+3. Enter the URL above.
+4. Use `digest authentication`.
+5. Click **Deploy** and press Inject.
+
+> **Verify:** the C1410 plays clip 0 and Debug shows an HTTP `200` response with a body starting with `OK`.
 
 ---
 
 ## Part 3: MQTT
 
-**Concept.** Devices **publish** messages to a **broker** on a **topic**. Node-RED **subscribes** to the topics it is interested in. Publisher and subscriber don't know each other.
+Now you learn the second transport method used in the lab. MQTT separates **publisher**, **broker** and **subscriber**. On the Axis device you configure the MQTT client and the publication of the call event.
 
-**Axis example.** The devices in this room publish to these topics:
+### 3.1 Configure the broker on the intercom
 
-| Topic | Payload example | Published when |
-|---|---|---|
-| `lab/entrance/intercom` | `{"device":"I8116-E","event":"call"}` | Someone presses the call button |
-| `lab/entrance/door` | `{"device":"A1210","event":"open"}` | Door opens (`open`), closes (`closed`), is held open too long (`held_open`), is forced (`forced`), access is granted (`access_granted`) or denied (`access_denied`) |
-| `lab/entrance/camera` | `{"device":"P1475-LE","event":"person"}` | The camera detects a person in the entrance area |
+1. Open the intercom web page.
+2. Go to the device **MQTT** settings.
+3. Turn on the MQTT client.
+4. Enter the broker IP (`MQTT_BROKER_IP`, the IP of the Node-RED machine).
+5. Use port `1883` for MQTT over TCP, unless your card says otherwise.
+6. Enter an MQTT username and password if the broker requires them (not needed in this lab).
+7. Set a recognizable **Client ID**, for example `INTERCOM_SERIAL`.
+8. Save and check that the client status shows **Connected**.
 
-### 3.1 Subscribe to everything
+> **Reference:** AXIS OS uses `1883` as the default port for MQTT over TCP and `8883` for MQTT over SSL.
 
-1. Drag an **mqtt in** node (category *network*) and double-click it:
-   - **Server**: `Workshop broker` (already configured, just select it)
-   - **Action**: `Subscribe to single topic`
-   - **Topic**: `lab/#`
-   - **QoS**: `1`
-   - **Output**: `auto-detect (parsed JSON object, string or buffer)`
-   - **Name**: `All lab events`
-2. Wire it to a **debug** node with **Output** `complete msg object`.
-3. Deploy.
+### 3.2 Publish the Call/State event
 
-**Verify.** The mqtt in node shows a green **connected** status.
+The lab uses the Axis event `tnsaxis:Call/State`. The value we care about is `CallState`, which takes the states `Idle`, `Calling` and `Active` during a call.
 
-### 3.2 Make some events
-
-Press the call button on the **intercom**, open the **door**, or walk in front of the **camera**. (If the devices are busy, the instructor can send simulated events.)
-
-**Verify.** Each message shows `topic` and a `payload` that is already an object (you can expand it).
-
-### 3.3 Play with wildcards
-
-| Topic filter | Receives |
-|---|---|
-| `lab/#` | Everything under `lab/` |
-| `lab/entrance/door` | Only door events |
-| `lab/+/door` | Door events from any site (`+` = exactly one level) |
-
-Change the topic, Deploy, and watch the difference.
-
-### 3.4 Optional: raw Axis events
-
-Change the topic to `axis/#`. These are the devices' own events, published with their serial number in the topic. Compare them with the `lab/...` messages: **a good naming convention makes integration much easier**. Change the topic back to `lab/#` afterwards, because raw events are very verbose.
-
-**Debugging order for MQTT:** broker → topic → message → subscriber.
-
----
-
-## Part 4: Event → action
-
-**Concept.** Separate the steps: **receive** (mqtt in), **decide** (switch), **prepare** (change), **act** (http request).
-
-**Goal.**
-
-| Event | Action on the C1410 |
-|---|---|
-| `call` (intercom) | Play clip 0: doorbell |
-| `held_open` (door) | Play clip 1: "please close the door" |
-| `forced` (door) | Play clip 2: "door forced" alarm |
-
-Check the clip numbers on your card.
-
-### 4.1 Receive
-
-Drag an **mqtt in** node: Server `Workshop broker`, Topic `lab/entrance/#`, QoS `1`, Output `auto-detect`, Name `Entrance events`.
-
-### 4.2 Decide
-
-1. Drag a **switch** node (category *function*), wire it after mqtt in, and double-click it:
-   - **Name**: `Which event?`
-   - **Property**: `msg.payload.event`
-   - Rules (use **+ add** at the bottom):
-     1. `==` `call`
-     2. `==` `held_open`
-     3. `==` `forced`
-   - At the bottom, select **stopping after first match**
-2. The switch now has **3 outputs**, one per rule.
-
-### 4.3 Prepare
-
-Drag three **change** nodes, one per switch output. In each one, set **Set** `msg.clip` **to the value** (type `number`):
-
-| Change node name | Set `msg.clip` to |
-|---|---|
-| `Clip 0: doorbell` | `0` |
-| `Clip 1: close the door` | `1` |
-| `Clip 2: door forced` | `2` |
-
-### 4.4 Act
-
-1. Drag **one** http request node and wire all three change nodes into it:
-   - **Method**: `GET`
-   - **URL**: `http://C1410_IP/axis-cgi/mediaclip.cgi?action=play&clip={{{clip}}}`
-   - Digest authentication with the credentials from your card
-   - **Name**: `Play clip (C1410)`
-2. Add a **debug** node after it and **Deploy**.
-
-`{{{clip}}}` is replaced with the value of `msg.clip` when the message arrives. This way one HTTP node can play any clip.
-
-**Verify.** Press the intercom call button: your speaker plays the doorbell. Keep the door open: after a few seconds you hear "please close the door".
-
-> All groups share the same intercom and door, so every speaker in the room will react. That is publish/subscribe in action: one publisher, many subscribers.
-
----
-
-## Part 5: Visualization
-
-**Concept.** The dashboard shows the result to the user. Build it only **after** you have verified the input in the debug panel.
-
-The dashboard page **Entrance** with two groups (**Door** and **Events**) is already prepared. You only add widgets.
-
-### 5.1 Show the last door event
-
-1. **mqtt in**: Topic `lab/entrance/door`, Server `Workshop broker`, Output `auto-detect`.
-2. **change**: **Set** `msg.payload` **to** `msg.payload.event` (type `msg.`). Name it `Keep only the event name`.
-3. **text** widget (category *dashboard 2*):
-   - **Group**: `[Entrance] Door`
-   - **Label**: `Last door event`
-4. Wire mqtt in → change → text.
-
-### 5.2 Unlock the door from the dashboard
-
-The A1210 uses the VAPIX **Door Control** service. You send a JSON body with **POST**:
+1. In the intercom's **MQTT publication** settings, turn on event publishing.
+2. Set the lab topic prefix to `axis/intercom`.
+3. Turn on including the serial number in the topic.
+4. Turn on including the condition/event topic and the ONVIF namespaces, so you get the full event topic.
+5. Check that the resulting topic has this structure:
 
 ```text
-POST http://A1210_IP/vapix/doorcontrol
-{"tdc:AccessDoor":{"Token":"DOOR_TOKEN"}}
+axis/intercom/INTERCOM_SERIAL/event/tns:axis/Call/State
 ```
 
-`AccessDoor` unlocks the door for a short time, like a valid card would.
+> **Verify:** in the example lab the real topic is `axis/intercom/B8A44F0B1CF0/event/tns:axis/Call/State`. Don't hard-code the serial in the flow: use `axis/intercom/#` to keep the subscriber reusable.
 
-1. **button** widget (category *dashboard 2*):
-   - **Group**: `[Entrance] Door`
-   - **Label**: `Unlock door`
-   - **Payload**: type `{} JSON`, value `{"tdc:AccessDoor":{"Token":"DOOR_TOKEN"}}` (token from your card)
-2. **http request**:
-   - **Method**: `POST`
-   - **URL**: `http://A1210_IP/vapix/doorcontrol`
-   - Digest authentication with the credentials from your card
-   - **Return**: `a UTF-8 string`
-3. **debug** after it.
-4. Wire button → http request → debug.
+### 3.3 Create your first subscriber in Node-RED
 
-### 5.3 Event log
+1. Drag an **mqtt in** node.
+2. Select the local broker (**Local broker**, already configured).
+3. **Topic** = `axis/intercom/#`.
+4. **QoS** = `1`.
+5. **Output** = `auto-detect`.
+6. Drag a **Debug** node to the right and set `complete msg object`.
+7. Wire mqtt in → Debug.
+8. Click **Deploy**.
 
-1. **mqtt in**: Topic `lab/#`, Server `Workshop broker`, Output `auto-detect`.
-2. **function** node named `Add to event log`, with this code:
+> **Verify:** when you press the intercom call button, Debug shows the topic and the payload. The payload contains `message.data.CallState`:
+>
+> ```text
+> msg.payload.message.data.CallState
+> ```
+
+### 3.4 Experiment with MQTT wildcards
+
+| Topic filter | What it receives |
+|---|---|
+| `axis/intercom/#` | Every topic under `axis/intercom/`, at any depth |
+| `axis/intercom/INTERCOM_SERIAL/event/tns:axis/Call/State` | Only Call/State events from that intercom |
+| `axis/intercom/+/event/tns:axis/Call/State` | Call/State events from any intercom. `+` matches exactly one topic level |
+
+A topic filter decides which MQTT messages the mqtt in node receives. Wildcards let you subscribe to many topics without listing them one by one.
+
+**Exercise:** change the Topic of the mqtt in node to each filter in the table, one at a time. After each change click **Deploy** and make a call from the intercom. Watch which messages arrive in Debug and compare.
+
+> **Note:** in MQTT filters, `#` matches zero or more levels and must be the last element; `+` matches exactly one level.
+
+---
+
+## Part 4: Integrate ACS Pro + Intercom + C1410
+
+This is where the full application flow starts. You connect ACS Pro, the AXIS Intercom and the AXIS C1410 using HTTP, MQTT and VAPIX. The dashboard is added only after the events are verified in Debug.
+
+### 4.1 Prepare the Node-RED tab
+
+1. Create a new tab called `AXIS Smart Entrance - ACS Pro bridge`.
+2. Divide the canvas visually into four areas: **ACS Pro events**, **Intercom MQTT**, **Speaker actions**, **Door unlock** (you can use **comment** nodes as headings).
+3. Leave space on the right for the logging node you create later.
+4. Don't create the dashboard yet. That comes in Part 5.
+
+### 4.2 Door → ACS Pro → Node-RED: Door open too long
+
+1. In ACS Pro go to **Configuration → Recording and events → Action rules**.
+2. Create a new action rule.
+3. Under **Triggers** choose **Device event** and select the AXIS A1601.
+4. Select the event **Door open too long**.
+5. Add the action **Send HTTP Notification**.
+6. Enter the URL `http://NODE_RED_IP:1880/acs/door-open-too-long`.
+7. Under **Advanced** set **Method** = `POST` and save the rule.
+
+### 4.3 Create the HTTP receiver in Node-RED
+
+1. Drag an **HTTP In** node.
+2. **Method** = `POST`.
+3. **URL** = `/acs/door-open-too-long`.
+4. Wire it to a **Function** node.
+5. Set the Function node to **2 outputs**: the first continues in the flow, the second replies to ACS Pro.
+6. Paste this code into the Function node:
 
    ```javascript
-   const log = flow.get('log') || [];
-   log.unshift({
-       time: new Date().toLocaleTimeString('it-IT'),
-       device: msg.payload.device,
-       event: msg.payload.event
-   });
-   msg.payload = log.slice(0, 10);
-   flow.set('log', msg.payload);
+   const res = { ...msg, payload: 'OK', statusCode: 200 };
+   msg.payload = { source: 'AXIS Camera Station Pro', event: 'door_open_too_long', severity: 'warning' };
+   return [msg, res];
+   ```
+
+7. Wire output 1 to the path that will lead to logging.
+8. Wire output 2 to an **HTTP Response** node.
+9. In the HTTP Response node use status `200` and content-type `text/plain`.
+
+### 4.4 Repeat for Door forced
+
+1. In ACS Pro create a second action rule with trigger **AXIS A1601 → Door forced**.
+2. Add **Send HTTP Notification**.
+3. URL = `http://NODE_RED_IP:1880/acs/door-forced`, Method = `POST`.
+4. In Node-RED create **HTTP In** with `POST` and URL `/acs/door-forced`.
+5. Wire it to a Function node with 2 outputs and paste:
+
+   ```javascript
+   const res = { ...msg, payload: 'OK', statusCode: 200 };
+   msg.payload = { source: 'AXIS Camera Station Pro', event: 'door_forced', severity: 'critical' };
+   return [msg, res];
+   ```
+
+6. Wire output 1 to the path that will lead to logging.
+7. Wire output 2 to **HTTP Response** with status `200` and content-type `text/plain`.
+8. Click **Deploy** and test both door events before continuing.
+
+### 4.5 Intercom → Node-RED: three states
+
+1. Use the mqtt in node from Part 3, or create a new one with topic `axis/intercom/#` and QoS `1`.
+2. Wire the mqtt in node to a **Switch** node.
+3. In the Switch **Property** field use `msg.payload.message.data.CallState`.
+4. Create three rules: `== Calling`, `== Active`, `== Idle`.
+5. At the bottom, select **stopping after first match**.
+
+**What step 5 means:** the Switch checks the rules in order and, as soon as one matches, sends the message only to that output and stops. That way a single `CallState` is not forwarded to the other branches too. You don't need to do anything special to the message: the setting only decides how many outputs are used. In the flow JSON this option is `checkall = false`.
+
+### 4.6 Normalize the three events
+
+1. After each Switch output, add a **Change** node.
+2. In each Change node create one rule: **Set** `msg.payload`.
+3. Select the type **JSON**.
+4. Use these values:
+
+   | Output | JSON value |
+   |---|---|
+   | Calling | `{"source":"AXIS Intercom","event":"Chiamata in arrivo","severity":"info"}` |
+   | Active | `{"source":"AXIS Intercom","event":"Chiamata accettata","severity":"info"}` |
+   | Idle | `{"source":"AXIS Intercom","event":"Chiamata interrotta","severity":"info"}` |
+
+   (Incoming call, call accepted, call ended. The dashboard text is in Italian for the Italian audience.)
+
+5. Wire all three Change nodes to the logging path you create in 4.8.
+
+From now on, intercom events have the same structure as the ACS Pro events: `source`, `event` and `severity`.
+
+### 4.7 Add the audio actions on the C1410
+
+1. On the C1410, check that the three clips from Part 2 are there and write down the numbers the device assigned.
+2. Don't create a new Switch or add extra Change nodes for audio. Reuse the nodes you already have: the Change node of the **Calling** branch and the two ACS Pro Function nodes.
+3. From the Calling Change node, wire an **HTTP Request** that plays the **Doorbell** clip.
+4. From the Function in 4.3, wire an HTTP Request that plays **Please close the door**.
+5. From the Function in 4.4, wire an HTTP Request that plays **Door forced alarm**.
+6. In each HTTP Request set **Method** = `GET`.
+7. Use a URL like `http://C1410_IP/axis-cgi/mediaclip.cgi?action=play&clip=CLIP_NUMBER` and replace `CLIP_NUMBER` with the real clip number.
+8. Set C1410 authentication to **Digest**.
+9. Add a Debug after each HTTP Request and check for an HTTP `200` response with body `OK`.
+
+Three separate HTTP Request nodes make the event → clip link easy to read and need no extra Switch or Change.
+
+### 4.8 Create a single logging node
+
+1. Create a Function node called `Normalize + append event log` with **2 outputs**.
+2. Paste this code:
+
+   ```javascript
+   let p = msg.payload;
+   if (typeof p === 'string') {
+       try { p = JSON.parse(p); }
+       catch (e) { p = { detail: p }; }
+   }
+   if (!p || typeof p !== 'object') p = { detail: String(p) };
+   const event = p.event || 'unknown';
+   const entry = {
+       time: new Date().toLocaleString('it-IT'),
+       source: p.source || 'unknown',
+       event,
+       severity: p.severity || 'info',
+       detail: p.detail || ''
+   };
+   let log = flow.get('eventLog') || [];
+   log.unshift(entry);
+   log = log.slice(0, 25);
+   flow.set('eventLog', log);
+   msg.payload = entry;
+   return [msg, { payload: log }];
+   ```
+
+3. Wire every normalized event (the two ACS Pro Function nodes and the three intercom Change nodes) into this Function.
+
+What the code does, line by line:
+
+1. `let p = msg.payload` reads the main content of the incoming message.
+2. `typeof p === 'string'` checks whether the payload arrived as text instead of an object.
+3. `JSON.parse(p)` tries to turn JSON text into an object the flow can use.
+4. `catch(e)` handles invalid JSON without stopping the flow and keeps the text in `detail`.
+5. The next check handles empty or unexpected payloads by creating a fallback object.
+6. `const event` and `const entry` extract and organize the data to show: event, source, severity, detail and timestamp.
+7. `flow.get('eventLog')` reads the history from flow context; `log.unshift(entry)` puts the new event on top.
+8. `log.slice(0, 25)` keeps the last 25 events and `flow.set(...)` saves the updated list.
+9. `msg.payload = entry` prepares the single event for the first output.
+10. `return [msg, { payload: log }]` creates two outputs: the first holds the latest event, the second the full history.
+
+### 4.9 Create the door unlock in ACS Pro
+
+1. In ACS Pro go to **Configuration → Recording and events → Action rules**.
+2. Create a new action rule.
+3. Under **Triggers** select **External HTTPS**.
+4. Set **Trigger name** = `UnlockDoor` (or the name on your card, if several groups share the same ACS Pro server).
+5. Save the trigger.
+6. In the same rule, add the action **Access Control**.
+7. Select the door to control. The displayed name depends on the site configuration.
+8. Select the action **Access**.
+9. Save the rule and check that the `UnlockDoor` trigger and the Access Control action are in the same action rule.
+
+### 4.10 Build the HTTPS command in Node-RED
+
+Before configuring the TLS node, export the CA from the ACS Pro server:
+
+1. In ACS Pro go to **Configuration → Security → Certificates**.
+2. In the **Certificate authority** section click **Export**.
+3. Choose **Without the private key** and save the certificate as `.cer` or `.crt`. Node-RED only needs the public part of the CA: never export the private key.
+
+Then in Node-RED:
+
+1. Create an **Inject** node for testing.
+2. Create a Function node called `Build ACS Pro trigger URL`.
+3. Paste this code and replace only `ACS_PRO_IP` with the ACS Pro server IP:
+
+   ```javascript
+   const host = 'ACS_PRO_IP';
+   const triggerName = 'UnlockDoor';
+   msg.method = 'GET';
+   msg.url = 'https://' + host + ':29204/Acs/Api/TriggerFacade/PulseTrigger?' + JSON.stringify({ triggerName });
+   msg.payload = '';
    return msg;
    ```
 
-   The function keeps the last 10 events in **flow context** (memory shared by the nodes on this tab) and sends the whole list on.
+   The HTTPS port used in this lab is `29204`: keep this value.
 
-3. **table** widget (category *dashboard 2*):
-   - **Group**: `[Entrance] Events`
-   - **Action**: `Replace`
-4. Wire mqtt in → function → table and **Deploy**.
-
-### 5.4 Open the dashboard
-
-Go to <http://localhost:1880/dashboard>.
-
-**Verify.**
-
-- Click **Unlock door**: the lock clicks, the debug sidebar shows `statusCode: 200`.
-- Open the door: *Last door event* changes to `open`, then `closed`.
-- Every event appears in the table.
-
-**You have built the full chain: event → action → visualization.**
+4. Wire the Function to an **HTTP Request** node.
+5. In the HTTP Request node leave **Method** = `- set by msg.method -`, because the method is already set by `msg.method`.
+6. Turn on **Enable secure (SSL/TLS) connection**, create a TLS configuration and upload the `.crt`/`.cer` file exported from ACS Pro in the **CA Certificate** field.
+7. Turn on **Use authentication**, type `basic authentication`, and enter the username and password of a valid ACS Pro account. If Basic returns HTTP `401` or the request is not authenticated, try Digest.
+8. Add a **Debug** after the HTTP Request with **Output** = `complete msg object`.
+9. Click **Deploy** and check that firing the trigger performs the Access Control action on the selected door.
 
 ---
 
-## Fallback flows
+## Part 5: Node-RED dashboard
 
-If a part does not work and time is running out, import the finished flow and continue with the next part.
+The dashboard is built last, when the events are already verified in Debug. This avoids using the UI as a troubleshooting tool: first verify the data, then make it visible.
 
-1. Node-RED menu (☰, top right) → **Import** → **select a file to import**
-2. Choose the file from the [flows](flows) folder:
+### 5.1 Check Dashboard 2.0
 
-   | Part | File |
-   |---|---|
-   | 1 | [part1-rest.json](flows/part1-rest.json) |
-   | 2 | [part2-vapix.json](flows/part2-vapix.json) |
-   | 3 | [part3-mqtt.json](flows/part3-mqtt.json) |
-   | 4 | [part4-event-action.json](flows/part4-event-action.json) |
-   | 5 | [part5-dashboard.json](flows/part5-dashboard.json) |
+1. Open the Node-RED ☰ menu.
+2. Go to **Manage palette**.
+3. Check that `@flowfuse/node-red-dashboard` is installed (it is preinstalled in the lab environment). If it's missing: **Install**, search for the package and install it.
 
-3. Click **Import**. The flow opens on a new tab.
-4. Open every **http request** node and:
-   - Replace the placeholder (`CAMERA_IP`, `C1410_IP`, `A1210_IP`) with the IP address from your card
-   - Enter the **username** and **password** (passwords are never stored in exported flows)
-5. In Part 5, also replace `DOOR_TOKEN` in the **Unlock door** button.
-6. **Deploy**.
+> **Verify:** the palette shows the *dashboard 2* nodes, such as **button**, **text** and **table**.
 
-> If two tabs subscribe to the same topic, both react. Right-click a tab you don't need → **Disable**, then Deploy.
+### 5.2 Create the Smart Entrance page
 
----
+1. Add any dashboard 2 widget and, from its **Group** field, create a new page (**ui-page**):
+   - Page name = `Smart Entrance`
+   - Path = `/smart-entrance`
+2. Create a **ui-group** called `Eventi ingresso` (entrance events).
+3. Create a second ui-group called `Comandi` (commands).
 
-## Bonus (if you finish early, or after the course)
+### 5.3 Show the last event
 
-### B1. Camera deterrence
+1. Drag a **text** node into the `Eventi ingresso` group.
+2. **Label** = `Ultimo evento` (last event).
+3. Set the format to the fields you want, for example:
 
-Add a fourth rule `== person` to the **Which event?** switch, and a change node that sets `msg.clip` to `3` ("this area is under video surveillance").
+   ```text
+   {{msg.payload.time}} · {{msg.payload.source}} · {{msg.payload.event}}
+   ```
 
-### B2. Tailgating detection
+4. Wire **output 1** of `Normalize + append event log` to the text node.
 
-A valid access lets **one** person in. If the camera sees two people within 10 seconds after `access_granted`, someone followed without a card. Add a function node after `Entrance events`:
+> **Verify:** when a new event arrives, the text updates without refreshing the page.
 
-```javascript
-const now = Date.now();
-if (msg.payload.event === 'access_granted') {
-    flow.set('grantedAt', now);
-    flow.set('people', 0);
-    return null;
-}
-if (msg.payload.event === 'person' && now - (flow.get('grantedAt') || 0) < 10000) {
-    const people = (flow.get('people') || 0) + 1;
-    flow.set('people', people);
-    if (people === 2) {
-        msg.clip = 4;
-        return msg;
-    }
-}
-return null;
+### 5.4 Create the event log
+
+1. Drag a **table** node into the `Eventi ingresso` group.
+2. **Label** = `Registro eventi (ultimi 25)` (event log, last 25).
+3. **Max rows** = `25`.
+4. **Action** = `Replace`.
+5. Wire **output 2** of `Normalize + append event log` to the table.
+
+> **Verify:** every new event appears at the top of the log, with at most 25 rows.
+
+### 5.5 Add the unlock button
+
+1. Drag a **button** node into the `Comandi` group.
+2. **Label** = `Richiedi sblocco porta` (request door unlock).
+3. **Payload** = `unlock`.
+4. **Topic** = `command`.
+5. Wire the button to the `Build ACS Pro trigger URL` Function from Part 4.
+6. Click **Deploy**.
+
+> **Verify:** pressing the button calls ACS Pro and the door **AEC main** performs the Access action.
+
+### 5.6 Open the dashboard
+
+```text
+http://NODE_RED_IP:1880/dashboard
 ```
 
-Wire its output to **Play clip (C1410)**. Clip 4 is "one person at a time, please".
-
-### B3. Bridge to the OT world (Modbus / OPC UA)
-
-The presentation covered Modbus and OPC UA. Node-RED can act as a gateway between the two worlds:
-
-1. ☰ → **Manage palette** → **Install** `node-red-contrib-modbus` (needs internet access).
-2. Add a **Modbus-Flex-Server** node (a simulated PLC).
-3. Write the door state into holding register 0 (`1` = open, `0` = closed) with a **Modbus-Write** node.
-4. Read it back with a **Modbus-Read** node, as a building management system would.
-
-The same idea works with OPC UA (`node-red-contrib-opcua`).
+> **Result:** the final dashboard shows the last event, the log of the last 25 events and the door unlock command.
 
 ---
 
-## Troubleshooting
+## 6. Final acceptance test
 
-| Symptom | Check |
-|---|---|
-| `statusCode: 401` | Username/password, and **Type** must be `digest authentication` |
-| `statusCode: 404` | URL path (typos, `axis-cgi` vs `vapix`) |
-| `statusCode: 400` | Parameters or JSON body (for example a wrong clip number or door token) |
-| Request times out / `ECONNREFUSED` / `EHOSTUNREACH` | Device IP address and network |
-| mqtt in shows **disconnected** | Server must be `Workshop broker`. Ask the instructor if the broker is running. |
-| mqtt in is **connected** but no messages | Topic filter (`lab/#`), then generate an event |
-| `msg.payload.event` is `undefined` | **Output** of mqtt in must be `auto-detect` (parsed JSON) |
-| Speaker does not play | Clip number on your card, and test the URL from Part 2 |
-| Dashboard shows nothing | Did you click **Deploy**? Is the widget in the right **Group**? |
-| Two tabs react to the same event | Disable the tab you don't need (right-click the tab → Disable) |
+Run the tests in this order. Don't test everything at once: the lab must make it clear exactly which block stopped working.
 
----
-
-## Reference
-
-### API calls used in this lab
-
-| Purpose | Method | Endpoint | VAPIX documentation |
-|---|---|---|---|
-| Read parameters | GET | `/axis-cgi/param.cgi?action=list&group=<group>` | Parameter management |
-| List audio clips | GET | `/axis-cgi/param.cgi?action=list&group=MediaClip` | [Media clip API](https://developer.axis.com/vapix/audio-systems/media-clip-api/) |
-| Play an audio clip | GET | `/axis-cgi/mediaclip.cgi?action=play&clip=<n>` | [Media clip API](https://developer.axis.com/vapix/audio-systems/media-clip-api/) |
-| Momentary door unlock | POST | `/vapix/doorcontrol` with `{"tdc:AccessDoor":{"Token":"<token>"}}` | [Door control service](https://developer.axis.com/vapix/physical-access-control/door-control-service/) |
-
-### MQTT topics
-
-| Topic | `device` | `event` values |
+| Test | Action | Expected result |
 |---|---|---|
-| `lab/entrance/intercom` | `I8116-E` | `call` |
-| `lab/entrance/door` | `A1210` | `open`, `closed`, `held_open`, `forced`, `access_granted`, `access_denied` |
-| `lab/entrance/camera` | `P1475-LE` | `person` |
+| 1 | C1410: play clip 0 from Node-RED | Speaker plays Doorbell |
+| 2 | Intercom: generate Calling | Dashboard: Chiamata in arrivo + clip 0 |
+| 3 | Intercom: generate Active | Dashboard: Chiamata accettata |
+| 4 | Intercom: generate Idle | Dashboard: Chiamata interrotta |
+| 5 | A1601: Door open too long | ACS Pro → HTTP → Node-RED → log + clip 1 |
+| 6 | A1601: Door forced | ACS Pro → HTTP → Node-RED → log + clip 2 |
+| 7 | Dashboard: Richiedi sblocco porta | Node-RED → HTTPS → ACS Pro → AEC main → Access |
+
+> **Definition of done:** the lab is complete when all seven tests produce the expected result and every step is visible in Debug or on the dashboard.
+
+### 6.1 Quick troubleshooting
+
+| Symptom | Check first | Then |
+|---|---|---|
+| HTTP 401 | Digest authentication + credentials | Device username and password |
+| HTTP 404 | URL and path | `axis-cgi` vs `vapix` |
+| HTTP 400 | Parameters/query/body | Clip number, trigger URL, JSON |
+| MQTT disconnected | Broker/port | Username/password and network |
+| MQTT connected but nothing arrives | `axis/intercom/#` | Generate Calling/Active/Idle |
+| `CallState` undefined | mqtt in Output = `auto-detect` | Path `msg.payload.message.data.CallState` |
+| Speaker doesn't play | Clip index | Direct play test (Part 2.5) |
+| ACS Pro doesn't reach Node-RED | URL `http://NODE_RED_IP:1880/acs/...` and method POST | Firewall between ACS Pro and Node-RED |
+| ACS unlock doesn't work | URL/port `29204` or assigned port | TLS + ACS Pro account |
+| Certificate error (`self-signed`, `altnames`) | Correct CA uploaded in the TLS node | In the TLS node set **Server Name** to the name in the ACS Pro certificate |
+| Empty dashboard | Deploy + correct group | Wire from the right output |
+
+---
+
+## 7. References
+
+- AXIS VAPIX Developer Documentation: <https://developer.axis.com/vapix/>
+- Media clip API: <https://developer.axis.com/vapix/audio-systems/media-clip-api/>
+- Intercom Call service API: <https://developer.axis.com/vapix/intercom/call-service-api/>
+- AXIS OS Web interface help - LTS 2026: <https://help.axis.com/en-us/axis-os-web-interface-help-lts-2026>
+- AXIS Camera Station Pro User manual: <https://help.axis.com/en-US/axis-camera-station-pro>
+- AXIS C1410 Network Mini Speaker: <https://help.axis.com/en-us/axis-c1410>
+
+> **Note on versions:** menu names can vary slightly between releases of AXIS OS, AXIS Camera Station Pro and Node-RED Dashboard. The concepts, endpoints and flow logic stay as documented or verified in the lab.
 
 ---
 
