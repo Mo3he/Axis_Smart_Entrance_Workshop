@@ -1,4 +1,4 @@
-FROM nodered/node-red:4.1
+FROM nodered/node-red:5.0
 
 RUN npm install --no-audit --no-fund --omit=dev @flowfuse/node-red-dashboard@1
 
